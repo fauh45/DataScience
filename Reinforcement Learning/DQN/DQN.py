@@ -1,9 +1,10 @@
 import random
 from collections import deque
 
-from keras.models import Sequential
-from keras.layers import Dense
-from keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.initializers import HeUniform
+from tensorflow.keras.optimizers import Adam
 
 import numpy as np
 
@@ -17,9 +18,6 @@ class DQN:
                  min_memory_size=500,
                  minibatch_size=10,
                  gamma=0.95,
-                 epsilon=1.0,
-                 epsilon_decay=0.995,
-                 epsilon_min=0.001,
                  learning_rate=0.001):
         self.state_shape = state_shape
         self.action_size = action_size
@@ -32,10 +30,6 @@ class DQN:
 
         self.lr = learning_rate
 
-        self.epsilon = epsilon
-        self.epsilon_decay = epsilon_decay
-        self.epsilon_min = epsilon_min
-
         self.model = self._make_model()
 
         self.target_model = self._make_model()
@@ -45,12 +39,17 @@ class DQN:
         self.update_count = 0
 
     def _make_model(self):
-        model = Sequential()
-        model.add(Dense(24, input_dim=self.state_shape, activation='relu'))
-        model.add(Dense(24, activation='relu'))
-        model.add(Dense(self.action_size, activation='linear'))
+        init = HeUniform()
 
-        model.compile(loss='mse', optimizer=Adam(learning_rate=self.lr))
+        model = Sequential()
+        model.add(Input(shape=self.state_shape))
+        model.add(Dense(24, activation='relu', kernel_initializer=init))
+        model.add(Dense(24, activation='relu', kernel_initializer=init))
+        model.add(Dense(self.action_size, activation='linear',
+                        kernel_initializer=init))
+
+        model.compile(loss='mse', optimizer=Adam(
+            learning_rate=self.lr), metrics=['accuracy'])
         return model
 
     def append_to_memory(self, transistion):
@@ -62,7 +61,7 @@ class DQN:
         self.memory.append(transistion)
 
     def get_qs(self, state):
-        return self.model.predict(np.array(state))[0]
+        return self.model.predict(state.reshape([1, state.shape[0]]))[0]
 
     def train(self, is_terminal, step):
         if len(self.memory) < self.min_memory_size:
@@ -98,9 +97,8 @@ class DQN:
             Y.append(current_qs)
 
         # Mini batch training
-        print('Fitting model on minibatch')
         self.model.fit(np.array(X), np.array(
-            Y), batch_size=self.minibatch_size, verbose=2, shuffle=False)
+            Y), batch_size=self.minibatch_size, verbose=0, shuffle=False)
 
         if is_terminal:
             self.update_count += 1
